@@ -1,5 +1,7 @@
 #%%
-from models.training_utils import get_tensor_index_df
+import sys 
+import os 
+sys.path.append("..")
 #%%
 import torch
 from torch_geometric.data import HeteroData
@@ -8,6 +10,7 @@ from torch_geometric import seed_everything
 import pandas as pd
 import os
 import pickle
+from models.training_utils import get_tensor_index_df
 #%%
 def load_node_csv(path, index_col, type_col, **kwargs):
     """Returns node dataframe and a dict of mappings for each node type. 
