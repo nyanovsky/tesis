@@ -1,5 +1,5 @@
 #%%
-from models.training_utils import get_tensor_index_df
+from models import training_utils
 #%%
 import torch
 from torch_geometric.data import HeteroData
