@@ -11,20 +11,16 @@ import sys
 import tqdm
 
 #%%
-def get_tensor_index_df(node_data, node_map, node_info):
+def get_tensor_index_df(node_data, node_map):
     sub_dfs = []
     for node_type in node_map.keys():
         sub_df = node_data[node_data.node_type == node_type]
-        node_map_series = pd.Series(node_map[node_type], name="tensor_index")
-        sub_df = sub_df.merge(node_map_series, left_on="node_index", right_index=True,
-                              how="right").sort_values(by="tensor_index").reset_index()
-
+        node_map_series = pd.Series(node_map[node_type], name="tensor_index") 
+        # series with idxs in sub_df idxs and values in their corresponding tensor idx 
+        sub_df = sub_df.join(node_map_series) # join combines by idx
         sub_dfs.append(sub_df)
-    tensor_df = pd.concat(sub_dfs, ignore_index=True)
-    df = pd.merge(tensor_df, node_info[["node_index", "comunidades_infomap", "comunidades_louvain",
-                  "degree_gda", "degree_pp", "degree_dd"]], on="node_index")
-    df["total_degree"] = df.degree_pp + df.degree_gda + df.degree_dd
-    return df
+    tensor_df = pd.concat(sub_dfs)
+    return tensor_df
 #%%
 def initialize_features(data, dim, feature_dict={}, inplace=False):
     if inplace:
@@ -40,7 +36,8 @@ def initialize_features(data, dim, feature_dict={}, inplace=False):
             torch.nn.init.xavier_uniform_(random_init)
             data_object[nodetype].x = random_init
 
-            data_object[nodetype].x[tensor_idxs] = nodetype_embs # Inicializo random y lleno con los que tenga
+            data_object[nodetype].x[tensor_idxs] = nodetype_embs 
+            # random init and then fill remaining (possibly all) with features
         else:
             random_init = torch.nn.Parameter(torch.Tensor(store["num_nodes"], dim), requires_grad = False)
             torch.nn.init.xavier_uniform_(random_init)
@@ -61,7 +58,9 @@ class NegativeSampler:
     def index_to_hash(self,edge_index):
         size = self.num_nodes
         row, col = edge_index
-        hashed_edges = (row * size[1]).add_(col)
+        hashed_edges = (row * size[1]).add_(col) 
+        # for give edge type (v,r,u), hashes edges as:
+        # (v_i, u_j) -> v_i*|u| + u_j (|u| num nodes of type u)
         return hashed_edges
 
     def hash_to_index(self,hashed_edges):
@@ -75,19 +74,19 @@ class NegativeSampler:
         src_or_dst: use src or dst weights to generate sample. 0:src weights, 1:dst weights
         """
         probs = torch.tensor(self.weights[src_or_dst]**0.75)
-        neg_samples = probs.multinomial(num_samples, replacement=True)
+        neg_samples = probs.multinomial(num_samples, replacement=True) # returns sampled idxs
         return neg_samples
     
     def generate_negative_edge_index(self,positive_edge_index,method):
         if method == "corrupt_both":
             num_samples = positive_edge_index.shape[1]
-            new_src_index = self.sample_negatives(num_samples,0)
-            new_dst_index = self.sample_negatives(num_samples,1)
+            new_src_index = self.sample_negatives(num_samples,0) # samples from src
+            new_dst_index = self.sample_negatives(num_samples,1) # samples from trgt
             negative_edge_index = torch.stack([new_src_index,new_dst_index])
             return negative_edge_index
         elif method == "fix_src":
             src_index, _ = positive_edge_index
-            new_dst_index = self.sample_negatives(src_index.numel(),1)
+            new_dst_index = self.sample_negatives(src_index.numel(),1) 
             negative_edge_index = torch.stack([src_index,new_dst_index])
             return negative_edge_index
         elif method == "fix_dst":
@@ -99,11 +98,11 @@ class NegativeSampler:
     def test_false_negatives(self,negative_edge_index,positive_edge_index):
         full_hash = self.full_positive_hash
         negative_hash = self.index_to_hash(negative_edge_index)
-        positive_hash = self.index_to_hash(positive_edge_index)
+        positive_hash = self.index_to_hash(positive_edge_index) 
 
         false_negatives_mask = torch.isin(negative_hash,full_hash)
-        new_negative_hash = negative_hash[~false_negatives_mask]
-        retry_positive_hash = positive_hash[false_negatives_mask]
+        new_negative_hash = negative_hash[~false_negatives_mask]  # hashed true negative edges
+        retry_positive_hash = positive_hash[false_negatives_mask] # hashed false negative edges
 
         return new_negative_hash, retry_positive_hash
     
