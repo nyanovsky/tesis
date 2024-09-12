@@ -97,7 +97,7 @@ p_test = 0.1
 p_train = round(1 - p_val - p_test, 1)
 
 split_transform = T.RandomLinkSplit(num_val=p_val, num_test=p_test, is_undirected=True, add_negative_train_samples=False,
-                                    disjoint_train_ratio=0.2, edge_types=edge_types, rev_edge_types=rev_edge_types)
+                                    disjoint_train_ratio=0.2, edge_types=[("gene","chg","chem")], rev_edge_types=[("chem","chg","gene")])
 transform_dataset = T.Compose([split_transform, T.ToSparseTensor(remove_edge_index=False)])
 
 train_data, val_data, test_data = transform_dataset(data)
@@ -144,13 +144,15 @@ def test_equal_num_edges(dataset):
         f"num chg edges in both directions is equal: {num_chg_r == num_chg_l}")
 
 
-def test_is_correct_p(dataset, p, total_num, prev_edges):
+def test_is_correct_p(dataset, p, total_num, prev_edges, is_train):
     # num_supervision divided by 2 because the same number of edges is generated as negative samples.
     # These are directed (i.e, a single link in one direction)
     num_supervision = dataset[(
-        "gene", "chg", "chem")]["edge_label"].shape[0]/2
+        "gene", "chg", "chem")]["edge_label"].shape[0]
+    if not is_train:
+        num_supervision /=2
 
-    # num_msg divided by 2 because these links are undirected (i.e, two links per edge, one in each direction)
+    
     num_msg = dataset[("gene", "chg", "chem")
                       ]["edge_index"].shape[1]
 
@@ -161,25 +163,29 @@ def test_is_correct_p(dataset, p, total_num, prev_edges):
 #%%
 total_num_chg = data[("gene", "chg", "chem")]["edge_index"].shape[1]
 
-datasets = [train_data, val_data, test_data]
+datasets = {"train":train_data, "validation":val_data, "test":test_data}
 percentage = [p_train, p_val, p_test]
-names = ["train", "validation", "test"]
 
 prev_edges = 0
-for name, dataset, p in zip(names, datasets, percentage):
+for name, p in zip(list(datasets.keys()), percentage):
     print(name + ":")
-    test_equal_num_edges(dataset)
-    test_is_correct_p(dataset, p, total_num_chg, prev_edges)
+    test_equal_num_edges(datasets[name])
+    test_is_correct_p(datasets[name], p, total_num_chg, prev_edges, name=="train")
     print("\n")
 
-    prev_edges = round(dataset[("gene", "chg", "chem")]["edge_label"].shape[0] /
-                       2 + dataset[("gene", "chg", "chem")]["edge_index"].shape[1])
+    num_sup_edges = datasets[name][("gene", "chg", "chem")]["edge_label"].shape[0]
+    num_msg_edges = datasets[name][("gene", "chg", "chem")]["edge_index"].shape[1]
+    if name !="train":
+        num_sup_edges /= 2
+        # no neg edges on train data, sampled on the fly while training
+
+    prev_edges = round(num_sup_edges+num_msg_edges)
 # %%
 # Save splits to cpu
 
 torch.save(data, dti_folder+"dti_full_dataset"+".pt")
 
-for dataset, name in zip(datasets, names):
+for name, dataset in datasets.items():
     path = dti_folder+"dti_"+name+".pt"
     torch.save(dataset, path)
 
