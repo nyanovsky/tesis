@@ -82,7 +82,7 @@ def get_reverse_types(edge_types):
 
 
 # %%
-dti_folder = "/biodata/nyanovsky/datasets/dti/"
+dti_folder = "/biodata/nyanovsky/datasets/dti/processed/"
 node_data, node_map = load_node_csv(dti_folder+"node_df.csv", "node_type")
 edge_data, edge_index = load_edge_csv(dti_folder+"edge_df.csv","src_node_index", 
                                       "trgt_node_index", node_map, "edge_type",
@@ -159,7 +159,7 @@ def test_is_correct_p(dataset, p, total_num, prev_edges):
     print(f"Is expected % of edges: {num == expected_num}")
     print(f"Expected {expected_num}, is {num}")
 #%%
-total_num_chg = data[("chem", "chg", "gene")]["edge_index"].shape[1]
+total_num_chg = data[("gene", "chg", "chem")]["edge_index"].shape[1]
 
 datasets = [train_data, val_data, test_data]
 percentage = [p_train, p_val, p_test]
@@ -174,4 +174,19 @@ for name, dataset, p in zip(names, datasets, percentage):
 
     prev_edges = round(dataset[("gene", "chg", "chem")]["edge_label"].shape[0] /
                        2 + dataset[("gene", "chg", "chem")]["edge_index"].shape[1])
+# %%
+# Save splits to cpu
+
+torch.save(data, dti_folder+"dti_full_dataset"+".pt")
+
+for dataset, name in zip(datasets, names):
+    path = dti_folder+"dti_"+name+".pt"
+    torch.save(dataset, path)
+
+
+with open(dti_folder+"dti_node_map.pickle", 'wb') as handle:
+    pickle.dump(node_map, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+# Save tensor dataframe 
+tensor_df.to_csv(dti_folder+"dti_tensor_df.csv")
 # %%
