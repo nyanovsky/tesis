@@ -1,6 +1,6 @@
 #%%
 import torch
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_score, precision_score, recall_score
 import matplotlib.pyplot as plt
 import numpy as np
 import copy
@@ -11,6 +11,30 @@ import sys
 import tqdm
 
 #%%
+def load_data(folder_path,load_inverted_map=True,load_test = False):
+    """If load_inverted_map=True, loads map from tensor_index to node_index. 
+    if False, loads map from node_index to tensor_index """
+    if load_test:
+        names = ["train","validation","test"]
+    else:
+        names = ["train","validation"]
+    datasets = []
+    for name in names:
+        path = folder_path+"dti_"+name+".pt"
+        datasets.append(torch.load(path))
+    
+    with open(folder_path+"dti_"+"node_map.pickle", 'rb') as handle:
+        node_map = pickle.load(handle)
+    
+    if load_inverted_map:
+        rev_map = {}
+        for node_type, map in node_map.items():
+            rev_map[node_type] = {v:k for k,v in map.items()}
+        node_map = rev_map
+    
+    return datasets, node_map
+
+
 def get_tensor_index_df(node_data, node_map):
     sub_dfs = []
     for node_type in node_map.keys():
@@ -21,7 +45,47 @@ def get_tensor_index_df(node_data, node_map):
         sub_dfs.append(sub_df)
     tensor_df = pd.concat(sub_dfs)
     return tensor_df
-#%%
+
+def train(model, optimizer, data):
+    model.train()
+    optimizer.zero_grad()
+    predictions = model(data.x_dict,data.adj_t_dict,data.edge_label_index_dict)
+    edge_label = data.edge_label_dict
+    loss = model.loss(predictions, edge_label)
+    loss.backward()
+    optimizer.step()
+
+    return loss.item()
+
+@torch.no_grad()
+def get_val_loss(model,val_data):
+    model.eval()
+    predictions = model(val_data.x_dict,val_data.adj_t_dict,val_data.edge_label_index_dict)
+    edge_label = val_data.edge_label_dict
+    loss = model.loss(predictions, edge_label)
+
+    return loss.item()
+
+@torch.no_grad()
+def test(model,data):
+  model.eval()
+  predictions = model(data.x_dict,data.adj_t_dict,data.edge_label_index_dict)
+  edge_label = data.edge_label_dict
+  all_scores = []
+  all_true = []
+  # por si el modelo predice más de un tipo de enlace, concatenamos todas las labels y preds
+  # en un solo tensor y calculamos una métrica global
+  for edge_type,y_score in predictions.items():
+      y_true = edge_label[edge_type]
+      all_scores.append(y_score)
+      all_true.append(y_true)
+  total_scores = torch.cat(all_scores, dim=0).cpu().numpy()
+  total_true = torch.cat(all_true, dim=0).cpu().numpy()
+  roc_auc = roc_auc_score(total_true,total_scores)
+  return round(roc_auc,3)
+
+
+
 def initialize_features(data, dim, feature_dict={}, inplace=False):
     if inplace:
         data_object = data
@@ -44,6 +108,16 @@ def initialize_features(data, dim, feature_dict={}, inplace=False):
             data_object[nodetype].x = random_init
         
     return data_object
+
+@torch.no_grad()
+def get_encodings(model,data):
+    model.eval()
+    x_dict = data.x_dict
+    edge_index = data.edge_index_dict
+    encodings = model.encoder(x_dict,edge_index)
+    return encodings
+
+
 # %%
 class NegativeSampler:
     def __init__(self,full_dataset,edge_type,src_degrees,dst_degrees) -> None:
@@ -138,5 +212,3 @@ class NegativeSampler:
         edge_label_index = torch.concat([positive_edge_index,sample],dim=1)
         edge_label = torch.concat([torch.ones(positive_edge_index.shape[1]), torch.zeros(positive_edge_index.shape[1])])
         return edge_label_index, edge_label
-
-# %%
