@@ -118,7 +118,7 @@ def get_encodings(model,data):
     return encodings
 
 
-# %%
+
 class NegativeSampler:
     def __init__(self,full_dataset,edge_type,src_degrees,dst_degrees) -> None:
         src_type, _ , dst_type = edge_type
@@ -133,7 +133,7 @@ class NegativeSampler:
         size = self.num_nodes
         row, col = edge_index
         hashed_edges = (row * size[1]).add_(col) 
-        # for give edge type (v,r,u), hashes edges as:
+        # for given edge type (v,r,u), hashes edges as:
         # (v_i, u_j) -> v_i*|u| + u_j (|u| num nodes of type u)
         return hashed_edges
 
@@ -212,3 +212,21 @@ class NegativeSampler:
         edge_label_index = torch.concat([positive_edge_index,sample],dim=1)
         edge_label = torch.concat([torch.ones(positive_edge_index.shape[1]), torch.zeros(positive_edge_index.shape[1])])
         return edge_label_index, edge_label
+    
+    
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False

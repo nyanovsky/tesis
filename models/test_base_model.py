@@ -26,8 +26,8 @@ train_params = {'weight_decay': 0.001,
  'feature_dim': 32}
 
 # %%
-gral_params = {"pre_process_layers": 0, 
-               "post_process_layers":0,
+gral_params = {"pre_process_layers": 1, 
+               "post_process_layers":1,
                "hidden_channels":32,
                "batch_norm": False,
                "dropout":0,
@@ -41,4 +41,6 @@ conv_params = {"aggr":"sum"}
 model = base_model.base_model(SAGEConv, gral_params, conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
 # %%
 train,val, test = exp_utils.init_features(train_set, val_set, test_set, train_params)
+# %%
+prueba = exp_utils.run_experiment(model, train, val, test, train_params, node_df)
 # %%

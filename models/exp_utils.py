@@ -98,4 +98,4 @@ def run_experiment(model, initialized_train_set, initialized_val_set, initialize
     
     preds, results = full_eval(initialized_test_set, model, node_df)
 
-    return model, results["auc"], preds
+    return model, results, preds

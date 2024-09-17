@@ -100,7 +100,7 @@ class hetero_MLP(torch.nn.Module):
 class conv_layer(torch.nn.Module):
     def __init__(self, conv, gral_params, conv_params, is_out_layer=False, is_in_layer=False):
         super().__init__()
-        self.conv = conv(32, gral_params["hidden_channels"], **conv_params)
+        self.conv = conv(in_channels=-1, out_channels=gral_params["hidden_channels"], **conv_params)
         
         self.normalize = gral_params["L2_norm"]
         self.is_out_layer = is_out_layer
