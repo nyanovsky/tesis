@@ -1,8 +1,10 @@
 #%%
+import sys
+sys.path.append("..")
 import torch
 import numpy as np
 from torch_geometric import seed_everything
-import training_utils, prediction_utils
+from models import prediction_utils, training_utils
 import pickle
 from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_score, precision_score, recall_score
 seed_everything(0)
@@ -41,6 +43,8 @@ def train_model(model, params, train_set, val_set):
     val_scores = []
 
     train_label_index = train_set["gene","chg","chem"]["edge_label_index"]
+    
+    early_stopper = training_utils.EarlyStopper(params["patience"], params["delta"])
 
     for epoch in range(params["epochs"]):
         #Resample negative supervision links every epoch
@@ -59,11 +63,11 @@ def train_model(model, params, train_set, val_set):
 
         val_scores.append(val_score)
         val_losses.append(val_loss)
-        ''''
+        
         if early_stopper.early_stop(val_loss):
             print("Early stopping")
             break
-            '''
+            
 
     val_auc = training_utils.test(model, val_set)
     curve_data = [train_losses, val_losses, train_scores, val_scores]

@@ -69,7 +69,7 @@ class hetero_MLP(torch.nn.Module):
             self.activate_last = True
             
         elif layer_type == "post_mlp":
-            self.in_dim = gral_params["hidden_channels"]
+            self.in_dim = -1
             self.num_layers = gral_params["post_process_layers"]
             self.activate_last = False
         
@@ -103,6 +103,7 @@ class conv_layer(torch.nn.Module):
         self.conv = conv(in_channels=-1, out_channels=gral_params["hidden_channels"], **conv_params)
         
         self.normalize = gral_params["L2_norm"]
+        self.skip = gral_params["layer_connectivity"]
         self.is_out_layer = is_out_layer
         self.is_in_layer = is_in_layer
 
@@ -125,6 +126,11 @@ class conv_layer(torch.nn.Module):
 
         if not self.is_out_layer:
             out = self.post_conv(out)
+            if not self.is_in_layer:
+                if self.skip == "sum":
+                    out += identity
+                elif self.skip == "cat":
+                    out = torch.cat([out, identity], dim=1)
             
         if self.normalize:
             out = torch.nn.functional.normalize(out,2,-1)
@@ -138,6 +144,8 @@ class msg_passing(torch.nn.Module):
         self.num_layers = gral_params["msg_passing_layers"]
         is_out_layer = gral_params["post_process_layers"] == 0
         is_in_layer = gral_params["pre_process_layers"] == 0
+
+        self.skip = gral_params["layer_connectivity"]
         
         self.layers = torch.nn.ModuleList()
         
