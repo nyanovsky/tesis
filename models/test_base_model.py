@@ -8,7 +8,8 @@ import training_utils, exp_utils
 import pandas as pd
 
 #%%
-data_folder = "/biodata/nyanovsky/datasets/dti/processed/"
+version = input("enter dataset version")
+data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 #%%
@@ -18,6 +19,8 @@ datasets, node_map = training_utils.load_data(data_folder,load_inverted_map=Fals
 
 train_set, val_set, test_set = datasets
 
+
+# %%
 train_params = {'weight_decay': 0.001,
  'lr': 0.001,
  'epochs': 400,
@@ -25,11 +28,11 @@ train_params = {'weight_decay': 0.001,
  'delta': 0.1,
  'feature_dim': 32}
 
-# %%
 gral_params = {"pre_process_layers": 1, 
                "post_process_layers":1,
                "hidden_channels":32,
                "batch_norm": False,
+               "layer_connectivity":False,
                "dropout":0,
                "macro_aggregation": "mean",
                "L2_norm": True,

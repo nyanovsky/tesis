@@ -10,8 +10,9 @@ from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_sco
 seed_everything(0)
 
 #%%
+version = input("enter dataset version:")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-data_folder = "/biodata/nyanovsky/datasets/dti/processed/"
+data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 #%%
 #%%
 
