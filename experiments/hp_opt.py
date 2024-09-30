@@ -42,9 +42,13 @@ initial_model_params  = {"pre_process_layers": 1,
                "L2_norm": True,
                "msg_passing_layers":3,
                "normalize_output":False}
+
 model_params_keys = initial_model_params.keys()
 
+initial_conv_params = {"aggr":"sum"}
+conv_params_keys = initial_conv_params.keys()
 
+#%%
 param_grid = {'weight_decay': [0.001],
               'lr': [0.01, 0.001, 0.0001],
               'epochs': [300,400, 500],
@@ -60,12 +64,14 @@ param_grid = {'weight_decay': [0.001],
               "macro_aggregation": ["sum", "mean"],
               "L2_norm": [True, False],
               "msg_passing_layers":[1,2,3,4],
-              "normalize_output":[True,False]}
+              "normalize_output":[True,False],
+              "aggr":["sum","mean","max"]}
 
 def separate_params(param_dict):
     train_params = {key:val for key,val in param_dict.items() if key in training_params_keys}
     model_params = {key:val for key,val in param_dict.items() if key in model_params_keys}
-    return train_params, model_params
+    conv_params = {key:val for key,val in param_dict.items() if key in conv_params_keys}
+    return train_params, model_params, conv_params
 
 #%%
 import subprocess
@@ -76,57 +82,69 @@ def get_gpu_temp():
     
     temp = int(result.stdout.strip())
     return temp
-# %%
-### RUN THIS ONLY ONCE ###
-train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, initial_training_params)[:2]
-model = base_model.base_model(SAGEConv, initial_model_params, {"aggr":"sum"}, datasets[0].metadata(), [("gene", "chg", "chem")])
-val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data)[1]
-
-initial_params = initial_training_params|initial_model_params
-parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc}])
-
 
 #%%
 from tqdm import tqdm 
 # Intented for repeated using and picking up at the last step of the random walk
 def walk(walk_df, max_iters, k_max):
 
-    walker = ParameterWalker(walk_df.iloc[-1,:-1].to_dict(), param_grid)
-    test = ConvergenceTest(0.005, 5)
-    
     k0 = walk_df.shape[0]
     k= k0
     T = 1-k/k_max
-    curr_auc = walk_df.iloc[-1,-1]
+    last_accepted = walk_df[walk_df["accepted"]==True].iloc[-1]
+    curr_auc, curr_params = last_accepted[-2], last_accepted[:-2]
+
+    walker = ParameterWalker(curr_params.to_dict(), param_grid)
+    test = ConvergenceTest(0.005, 10, curr_auc)
 
     with tqdm(total=max_iters) as pbar:
         while k<k0+max_iters:
             if k%5==0 and get_gpu_temp() > 73:
                 print("breaking, too high GPU temp")
-                break 
+                return walk_df 
 
             params = walker.random_step()
-            train_params, model_params = separate_params(params)
+            train_params, model_params, conv_params = separate_params(params)
 
             train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, train_params)[:2]
 
-            model = base_model.base_model(SAGEConv, model_params, {"aggr":"sum"}, datasets[0].metadata(), [("gene", "chg", "chem")])
+            model = base_model.base_model(SAGEConv, model_params, conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
             val_auc = exp_utils.train_model(model, train_params, train_data,val_data)[1]
 
             delta = curr_auc-val_auc 
 
             accept_step = min(1,np.exp(-delta/T))
 
+            accepted = False
             if accept_step > np.random.random():
+
                 walker.accept_step(params)
                 curr_auc = val_auc
+                accepted = True
 
-            walk_df = pd.concat([walk_df, pd.DataFrame([params|{"val_auc":val_auc}])])
+                if test.check_convergence(curr_auc):
+                    print("walk converged")
+                    return walk_df
+
+            walk_df = pd.concat([walk_df, pd.DataFrame([params|{"val_auc":val_auc, "accepted":accepted}])])
 
             pbar.update(1)
             k+=1
     return walk_df
 # %%
+### RUN THIS ONLY ONCE ###
+train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, initial_training_params)[:2]
+model = base_model.base_model(SAGEConv, initial_model_params, initial_conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
+val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data)[1]
+
+initial_params = initial_training_params|initial_model_params|initial_conv_params
+parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc, "accepted":True}])
+
+
 walk_df = walk(parameter_walk_df, 100, 1000)
-walk_df.to_csv("results/walk_df.csv")
+walk_df.to_csv("results/walk_df.csv", index=False)
+# %%
+# continue walk here each time:
+walk_df = pd.read_csv("results/walk_df.csv") 
+walk_df = walk(walk_df, 100, 1000)
 # %%

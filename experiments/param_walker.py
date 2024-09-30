@@ -41,11 +41,11 @@ class ParameterWalker():
         self.historial.append(list(new_params.values()))
 
 class ConvergenceTest:
-    def __init__(self, delta,tolerance):
+    def __init__(self, delta,tolerance, last_auc):
         self.tolerance = tolerance
         self.delta = delta
         self.counter = 0
-        self.prev_auc = 0
+        self.prev_auc = last_auc
     
     def check_convergence(self,current_auc):
         diff = round(abs(current_auc - self.prev_auc),3)
