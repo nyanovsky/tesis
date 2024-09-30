@@ -6,11 +6,13 @@ sys.path.append("..")
 import torch
 from torch_geometric.data import HeteroData
 import torch_geometric.transforms as T
-from torch_geometric import seed_everything
 import pandas as pd
 import os
 import pickle
 from models.training_utils import get_tensor_index_df, NegativeSampler
+
+from torch_geometric import seed_everything
+seed_everything(42)
 #%%
 def load_node_csv(path, type_col, **kwargs):
     """Returns node dataframe and a dict of mappings for each node type. 
@@ -82,7 +84,8 @@ def get_reverse_types(edge_types):
 
 
 # %%
-dti_folder = "/biodata/nyanovsky/datasets/dti/processed/"
+version = input()
+dti_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 node_data, node_map = load_node_csv(dti_folder+"node_df.csv", "node_type")
 edge_data, edge_index = load_edge_csv(dti_folder+"edge_df.csv","src_node_index", 
                                       "trgt_node_index", node_map, "edge_type",
