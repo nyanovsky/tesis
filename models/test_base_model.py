@@ -30,11 +30,11 @@ train_params = {'weight_decay': 0.001,
 
 gral_params = {"pre_process_layers": 1, 
                "post_process_layers":1,
-               "hidden_channels":32,
+               "hidden_channels":64,
                "batch_norm": False,
                "layer_connectivity":False,
                "dropout":0,
-               "macro_aggregation": "mean",
+               "macro_aggregation": "sum",
                "L2_norm": True,
                "msg_passing_layers":3,
                "normalize_output":False}
@@ -43,7 +43,33 @@ conv_params = {"aggr":"sum"}
 # %%
 model = base_model.base_model(SAGEConv, gral_params, conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
 # %%
-train,val, test = exp_utils.init_features(train_set, val_set, test_set, train_params)
+protein_features = []
+protein_ids = []
+with open("/biodata/nyanovsky/datasets/dti/processed/v2/prot_features_64.txt","r") as file:
+    for line in file:
+        protein_features.append([float(x) for x in line.strip().split()])
+
+with open("/biodata/nyanovsky/datasets/dti/processed/v2/prot_features_ids.txt","r") as file:
+    for line in file:
+        protein_ids.append("G"+line.strip())
+
+protein_feature_tensor = torch.tensor(protein_features, dtype=torch.float32)
+
+#%%
+gene_node_df = node_df[node_df["node_type"]=="gene"]
+gene_node_df.set_index("node_id", drop=False,inplace=True)
+
+data_gene_node_ids = gene_node_df["node_id"].values
+protein_ids = pd.Series(protein_ids)
+ids_in_data = protein_ids.isin(data_gene_node_ids)
+
+protein_feature_tensor = protein_feature_tensor[ids_in_data]
+protein_ids = protein_ids[ids_in_data].to_list()
+
+protein_tensor_idxs = gene_node_df.loc[protein_ids, "tensor_index"]
+protein_feature_dict = {"gene":[protein_feature_tensor, protein_tensor_idxs]}
+# %%
+train,val, test = exp_utils.init_features(train_set, val_set, test_set, train_params, protein_feature_dict)
 # %%
 prueba = exp_utils.run_experiment(model, train, val, test, train_params, node_df)
 # %%
