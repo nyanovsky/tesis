@@ -8,10 +8,10 @@ import copy
 import pickle
 # %%
 class ParameterWalker():
-    def __init__(self, start, possible_params) -> None:
+    def __init__(self, start, historial,possible_params) -> None:
         self.possible_params = possible_params
         self.start = start
-        self.historial = [list(start.values())]
+        self.historial = historial
         self.dimensions = np.array(list(self.possible_params.keys()))
         self.current_params = copy.copy(start)
 
@@ -19,10 +19,11 @@ class ParameterWalker():
         chosen_dim = np.random.choice(self.dimensions,1)[0]
         values = self.possible_params[chosen_dim]
         flip_coin = np.random.choice([-1,1],1)[0]
-        # izq o der en los posibles valores del parametro elegido 
-        # sesgo al orden? quizas mejor elegir al azar dentro de las posibles,
-        # impone implicitamente continuidad de la perf en los params (que podrian ni tener orden)
-        current_index = values.index(self.current_params[chosen_dim])
+        
+        chosen_param = self.current_params[chosen_dim]
+        if chosen_dim == "layer_connectivity" and chosen_param == "False":
+            chosen_param = False
+        current_index = values.index(chosen_param)
         new_index = (current_index + flip_coin)% len(values)
 
         new_params = copy.copy(self.current_params)
@@ -60,20 +61,3 @@ class ConvergenceTest:
             return True
         else:
             return False
-
-# %%
-# init walker
-# k = 0 
-# k_max = k_max
-# T = 1-(k+1)/k_max 
-# while k<k_max and not converged(curr_acu)
-#   params = random step 
-#   model(params)
-#   delta = curr_auc-new_auc
-#   accept_step = min(1,np.exp(-delta/T))
-#   if accept_step > np.random.random():
-#       walker.accept_step(params)
-#       record performance (df with steps and auc)
-#   k++
-# Para correr esto en partes (500 iteraciones un dia y 500 otro, por ejemplo),
-# deberia tomar un k_0 y una configuracion inicial (la sacaria del df.iloc[-1,:-1])

@@ -1,5 +1,4 @@
 #%%
-from os import sep
 import sys 
 sys.path.append("..")
 #%%
@@ -7,11 +6,12 @@ import torch
 import numpy as np
 import pandas as pd
 
-from models import training_utils, exp_utils, base_model
+from models import exp_utils, training_utils, base_model
 from param_walker import ParameterWalker, ConvergenceTest
 from torch_geometric.nn import SAGEConv, GATConv
 # %%
-data_folder = "/biodata/nyanovsky/datasets/dti/processed/"
+version = input("enter dataset version: ")
+data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 #%%
@@ -90,11 +90,15 @@ def walk(walk_df, max_iters, k_max):
 
     k0 = walk_df.shape[0]
     k= k0
-    T = 1-k/k_max
     last_accepted = walk_df[walk_df["accepted"]==True].iloc[-1]
     curr_auc, curr_params = last_accepted[-2], last_accepted[:-2]
 
-    walker = ParameterWalker(curr_params.to_dict(), param_grid)
+    if k0==1:
+        historial = [walk_df.iloc[0,:-2].values.tolist()]
+    else:
+        historial = walk_df.iloc[:,:-2].values.tolist()
+
+    walker = ParameterWalker(curr_params.to_dict(), historial, param_grid)
     test = ConvergenceTest(0.005, 10, curr_auc)
 
     with tqdm(total=max_iters) as pbar:
@@ -103,7 +107,9 @@ def walk(walk_df, max_iters, k_max):
                 print("breaking, too high GPU temp")
                 return walk_df 
 
-            params = walker.random_step()
+            T = 1-k/k_max
+
+            params = walker.next()
             train_params, model_params, conv_params = separate_params(params)
 
             train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, train_params)[:2]
@@ -142,9 +148,14 @@ parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc, "accepted":
 
 
 walk_df = walk(parameter_walk_df, 100, 1000)
-walk_df.to_csv("results/walk_df.csv", index=False)
+walk_df.to_csv(f"results/{version}/walk_df.csv", index=False)
 # %%
 # continue walk here each time:
-walk_df = pd.read_csv("results/walk_df.csv") 
+walk_df = pd.read_csv(f"results/{version}/walk_df.csv") 
 walk_df = walk(walk_df, 100, 1000)
+walk_df.to_csv(f"results/{version}/walk_df.csv", index=False)
 # %%
+
+#### GAT ####
+
+# Test best 10 convs for SAGE and then launch walk from best one.
