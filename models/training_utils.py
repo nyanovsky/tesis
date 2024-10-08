@@ -85,6 +85,37 @@ def test(model,data):
   return round(roc_auc,3)
 
 
+def load_feature_dict(path_to_features, path_to_idxs, node_df, nodetype):
+    first = nodetype[0].upper()
+    features = []
+    ids = []
+    with open(path_to_features,"r") as file:
+        for line in file:
+            features.append([float(x) for x in line.strip().split()])
+
+    with open(path_to_idxs,"r") as file:
+        for line in file:
+            ids.append(first+line.strip())
+
+    feature_tensor = torch.tensor(features, dtype=torch.float32)
+
+    nodetype_df = node_df[node_df["node_type"]==nodetype]
+    nodetype_df.set_index("node_id", drop=False,inplace=True)
+
+    data_node_ids = nodetype_df["node_id"].values
+    feature_ids = pd.Series(ids)
+    ids_in_data = feature_ids.isin(data_node_ids)
+
+    feature_tensor = feature_tensor[ids_in_data]   # type: ignore
+    feature_ids = feature_ids[ids_in_data].to_list()
+
+    tensor_idxs = nodetype_df.loc[feature_ids, "tensor_index"]
+    feature_dict = {"gene":[feature_tensor, tensor_idxs]}
+
+    return feature_dict
+
+
+
 
 def initialize_features(data, dim, feature_dict={}, inplace=False):
     if inplace:
