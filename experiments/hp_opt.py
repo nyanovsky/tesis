@@ -16,11 +16,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 #%%
 node_df = pd.read_csv(data_folder+"dti_tensor_df.csv",index_col=0)
-#load data
-datasets, node_map = training_utils.load_data(data_folder,load_inverted_map=False,load_test=True)
-
-train_set, val_set, test_set = datasets
-
 #%%
 gene_feature_dict = training_utils.load_feature_dict(data_folder+"prot_features_64.txt", data_folder+"prot_features_ids.txt", 
                                                     node_df, "gene")
@@ -35,8 +30,8 @@ def get_gpu_temp():
     temp = int(result.stdout.strip())
     return temp
 
-def separate_params(param_dict, initial_keys):
-    training_keys, model_keys, conv_keys = initial_keys
+def separate_params(param_dict, keys):
+    training_keys, model_keys, conv_keys = keys
     train_params = {key:val for key,val in param_dict.items() if key in training_keys}
     model_params = {key:val for key,val in param_dict.items() if key in model_keys}
     conv_params = {key:val for key,val in param_dict.items() if key in conv_keys}
@@ -45,7 +40,8 @@ def separate_params(param_dict, initial_keys):
 #%%
 from tqdm import tqdm 
 # Intented for repeated using and picking up at the last step of the random walk
-def walk(param_grid, walk_df, max_iters, k_max, conv, initial_keys):
+def walk(param_grid, walk_df, max_iters, k_max, conv, initial_keys, dataset):
+    train_set, val_set, test_set = dataset
 
     k0 = walk_df.shape[0]
     k= k0
@@ -76,9 +72,13 @@ def walk(param_grid, walk_df, max_iters, k_max, conv, initial_keys):
             else:
                 train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, train_params)[:2]
 
-            model = base_model.base_model(conv, model_params, conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
-            val_auc = exp_utils.train_model(model, train_params, train_data,val_data)[1]
-
+            model = base_model.base_model(conv, model_params, conv_params, train_set.metadata(), [("gene", "chg", "chem")])
+            try:
+                val_auc = exp_utils.train_model(model, train_params, train_data,val_data)[1]
+            except:
+                print(params)
+                k += 1
+                continue
             delta = curr_auc-val_auc 
 
             accept_step = min(1,np.exp(-delta/T))
@@ -100,77 +100,13 @@ def walk(param_grid, walk_df, max_iters, k_max, conv, initial_keys):
             k+=1
     return walk_df
 
+def init_df(conv, dataset, initial_training_params, initial_model_params, initial_conv_params):
+    train_set, val_set, test_set = dataset
+    train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, initial_training_params)[:2]
+    model = base_model.base_model(conv, initial_model_params, initial_conv_params, train_set.metadata(), [("gene", "chg", "chem")])
+    val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data)[1]
 
+    initial_params = initial_training_params|initial_model_params|initial_conv_params
+    parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc, "accepted":True}])
 
-### ---------------- SAGE ---------------###
-#%%
-initial_training_params =  {'weight_decay': 0.001,
- 'lr': 0.001,
- 'epochs': 400,
- 'patience': 10,
- 'delta': 0.1,
- 'feature_dim': 32,
- 'features': "random"}
-
-training_params_keys = initial_training_params.keys()
-
-initial_model_params  = {"pre_process_layers": 1, 
-               "post_process_layers":1,
-               "layer_connectivity":False,
-               "hidden_channels":32,
-               "batch_norm": False,
-               "dropout":0,
-               "macro_aggregation": "mean",
-               "L2_norm": True,
-               "msg_passing_layers":3,
-               "normalize_output":False}
-
-model_params_keys = initial_model_params.keys()
-
-initial_conv_params = {"aggr":"sum"}
-conv_params_keys = initial_conv_params.keys()
-
-initial_sage_keys = [training_params_keys, model_params_keys, conv_params_keys]
-
-#%%
-param_grid = {'weight_decay': [0.001],
-              'lr': [0.01, 0.001, 0.0001],
-              'epochs': [300,400, 500],
-              'patience': [10],
-              'delta': [0.1],
-              'feature_dim': [16,32, 64, 128],
-              'features': ["random", "go2vec"],
-              "pre_process_layers": [0,1,2],
-              "post_process_layers":[0,1,2],
-              "layer_connectivity":[False,"sum","cat"],
-              "hidden_channels":[16,32,64,128],
-              "batch_norm": [False, True],
-              "dropout":[0, 0.3,0.5],
-              "macro_aggregation": ["sum", "mean"],
-              "L2_norm": [True, False],
-              "msg_passing_layers":[1,2,3,4],
-              "normalize_output":[True,False],
-              "aggr":["sum","mean","max"]}
-
-# %%
-### RUN THIS ONLY ONCE ###
-train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, initial_training_params)[:2]
-model = base_model.base_model(SAGEConv, initial_model_params, initial_conv_params, datasets[0].metadata(), [("gene", "chg", "chem")])
-val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data)[1]
-
-initial_params = initial_training_params|initial_model_params|initial_conv_params
-parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc, "accepted":True}])
-
-
-walk_df = walk(param_grid, parameter_walk_df, 100, 1000, SAGEConv, initial_sage_keys)
-walk_df.to_csv(f"results/{version}/walk_df.csv", index=False)
-# %%
-# continue walk here each time:
-walk_df = pd.read_csv(f"results/{version}/walk_df.csv") 
-walk_df = walk(param_grid, walk_df, 100, 1000, SAGEConv, initial_sage_keys)
-walk_df.to_csv(f"results/{version}/walk_df.csv", index=False)
-# %%
-
-#### GAT ####
-
-# Test best 10 convs for SAGE and then launch walk from best one.
+    return parameter_walk_df
