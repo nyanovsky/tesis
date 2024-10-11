@@ -1,3 +1,4 @@
+#type: ignore
 #%%
 import sys
 sys.path.append("..")
@@ -87,10 +88,10 @@ def full_eval(data,model,node_df):
     y_pred_labels = preds.score.values.round()
 
     auc = roc_auc_score(y_true,y_score)
-    acc = accuracy_score(y_true,y_pred_labels)
-    ap = average_precision_score(y_true,y_score)
-    precision = precision_score(y_true,y_pred_labels)
-    recall = recall_score(y_true,y_pred_labels)
+    acc = accuracy_score(y_true,y_pred_labels) 
+    ap = average_precision_score(y_true,y_score) 
+    precision = precision_score(y_true,y_pred_labels) 
+    recall = recall_score(y_true,y_pred_labels) 
 
     return preds, {"auc":auc, "acc":acc, "ap":ap, "precision":precision, "recall":recall}
 

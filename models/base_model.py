@@ -98,19 +98,24 @@ class hetero_MLP(torch.nn.Module):
     
     
 class conv_layer(torch.nn.Module):
-    def __init__(self, conv, gral_params, conv_params, is_out_layer=False, is_in_layer=False):
+    def __init__(self, conv, gral_params, conv_params, layer_num, is_out_layer=False, is_in_layer=False):
         super().__init__()
-        self.conv = conv(in_channels=-1, out_channels=gral_params["hidden_channels"], **conv_params)
+        self.conv = conv(in_channels= (-1,-1), out_channels=gral_params["hidden_channels"], **conv_params)
         
         self.normalize = gral_params["L2_norm"]
         self.skip = gral_params["layer_connectivity"]
+        self.layer_num = layer_num
         self.is_out_layer = is_out_layer
         self.is_in_layer = is_in_layer
+
+        self.heads = 1
+        if "heads" in conv_params.keys() and conv_params["concat"]:
+            self.heads = conv_params["heads"]
 
         if not self.is_out_layer:
             post_conv_modules = []
             if gral_params["batch_norm"]:
-                bn = torch.nn.BatchNorm1d(gral_params["hidden_channels"])
+                bn = torch.nn.BatchNorm1d(gral_params["hidden_channels"]*self.heads)
                 post_conv_modules.append(bn)
             
             if gral_params["dropout"] > 0:
@@ -122,15 +127,18 @@ class conv_layer(torch.nn.Module):
     
     def forward(self, x, edge_index):
         identity = x
-        out = self.conv(x,edge_index)
+        out = self.conv(x,edge_index) # out_dim: hidden_channels * heads
 
         if not self.is_out_layer:
             out = self.post_conv(out)
             if not self.is_in_layer:
                 if self.skip == "sum":
+                    if self.heads != 1 and self.layer_num == 0:
+                        identity = torch.cat([identity]*self.heads, dim=1)
                     out += identity
                 elif self.skip == "cat":
                     out = torch.cat([out, identity], dim=1)
+                #TODO: emprolijar esto 
             
         if self.normalize:
             out = torch.nn.functional.normalize(out,2,-1)
@@ -150,18 +158,18 @@ class msg_passing(torch.nn.Module):
         self.layers = torch.nn.ModuleList()
         
         if self.num_layers == 1:
-            layer = to_hetero(conv_layer(conv, gral_params, conv_params,is_out_layer=is_out_layer,is_in_layer=is_in_layer),metadata,aggr=gral_params["macro_aggregation"])
+            layer = to_hetero(conv_layer(conv, gral_params, conv_params, 0, is_out_layer=is_out_layer,is_in_layer=is_in_layer),metadata,aggr=gral_params["macro_aggregation"])
             self.layers.append(layer)
         else:
             for i in range(self.num_layers):
                 if i == self.num_layers-1:
-                    layer = to_hetero(conv_layer(conv, gral_params, conv_params,is_out_layer=is_out_layer),metadata,aggr=gral_params["macro_aggregation"])
+                    layer = to_hetero(conv_layer(conv, gral_params, conv_params, i,is_out_layer=is_out_layer),metadata,aggr=gral_params["macro_aggregation"])
 
                 elif i == 0:
-                    layer = to_hetero(conv_layer(conv, gral_params, conv_params,is_in_layer=is_in_layer),metadata,aggr=gral_params["macro_aggregation"])
+                    layer = to_hetero(conv_layer(conv, gral_params, conv_params,i, is_in_layer=is_in_layer),metadata,aggr=gral_params["macro_aggregation"])
 
                 else:
-                    layer = to_hetero(conv_layer(conv, gral_params, conv_params),metadata,aggr=gral_params["macro_aggregation"])
+                    layer = to_hetero(conv_layer(conv, gral_params, conv_params,i),metadata,aggr=gral_params["macro_aggregation"])
                 self.layers.append(layer)
                 
     def _reset_child_params(self,module):
