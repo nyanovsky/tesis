@@ -73,7 +73,7 @@ initial_keys = [training_params_keys, model_params_keys, initial_gat_params.keys
 ### RUN ONLY ONCE ###
 gat_walk_df = hp_opt.init_df(GATConv, dataset, initial_training_params, initial_model_params, initial_gat_params)
 gat_walk_df.to_csv(f"results/{version}/gat_walk_df.csv", index=False)
-# %%
+
 # %%
 # continue walk here each time:
 gat_walk_df = pd.read_csv(f"results/{version}/gat_walk_df.csv") 

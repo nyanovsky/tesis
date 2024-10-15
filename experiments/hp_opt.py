@@ -8,7 +8,6 @@ import pandas as pd
 
 from models import exp_utils, training_utils, base_model
 from param_walker import ParameterWalker, ConvergenceTest
-from torch_geometric.nn import SAGEConv, GATConv
 # %%
 version = input("enter dataset version: ")
 data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
@@ -36,6 +35,7 @@ def separate_params(param_dict, keys):
     model_params = {key:val for key,val in param_dict.items() if key in model_keys}
     conv_params = {key:val for key,val in param_dict.items() if key in conv_keys}
     return train_params, model_params, conv_params
+
 
 #%%
 from tqdm import tqdm 
