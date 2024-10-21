@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from models import training_utils
-from experiments import hp_opt
+from optimization import hp_opt
 from torch_geometric.nn import  GATConv
 
 #%%
