@@ -90,6 +90,8 @@ def get_neighbors(node_idx, nodetype, edge_index_dict):
         src, rel, trgt = edgetype
         if nodetype==src:
             neighbors = edgetype_edge_index[1, edgetype_edge_index[0]==node_idx]
+            if trgt == src:
+                neighbors = torch.cat((neighbors, edgetype_edge_index[0, edgetype_edge_index[1]==node_idx]))
             if trgt not in neighbors_dict.keys():
                 neighbors_dict[trgt] = neighbors
             else:
