@@ -25,10 +25,10 @@ def init_features(train_set, val_set, test_set, params, feature_dict={}):
 
 
 
-full_set = torch.load(data_folder+"dti_full_dataset.pt")
-negative_sampler = training_utils.NegativeSampler(full_set,("gene","chg","chem"),full_set["gene"]["degree_chg"],full_set["chem"]["degree_chg"])
+#full_set = torch.load(data_folder+"dti_full_dataset.pt")
+#negative_sampler = training_utils.NegativeSampler(full_set,("gene","chg","chem"),full_set["gene"]["degree_chg"],full_set["chem"]["degree_chg"])
 
-def train_model(model, params, train_set, val_set):
+def train_model(model, params, train_set, val_set, negative_sampler):
     
     train_set.to(device)
     val_set.to(device)
@@ -66,9 +66,11 @@ def train_model(model, params, train_set, val_set):
         val_scores.append(val_score)
         val_losses.append(val_loss)
         
+        """
         if early_stopper.early_stop(val_loss):
             print("Early stopping")
             break
+            """
             
 
     val_auc = training_utils.test(model, val_set)
@@ -96,12 +98,12 @@ def full_eval(data,model,node_df):
     return preds, {"auc":auc, "acc":acc, "ap":ap, "precision":precision, "recall":recall}
 
 
-def run_experiment(model, initialized_train_set, initialized_val_set, initialized_test_set, params, node_df ):
+def run_experiment(model, initialized_train_set, initialized_val_set, initialized_test_set, params, negative_sampler, node_df ):
 
-    model, val_auc, curve_data = train_model(model, params, initialized_train_set, initialized_val_set)
+    model, val_auc, curve_data = train_model(model, params, initialized_train_set, initialized_val_set, negative_sampler)
 
     model = model.to("cpu")
     
     preds, results = full_eval(initialized_test_set, model, node_df)
 
-    return model, results, preds
+    return model, results, preds, curve_data

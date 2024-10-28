@@ -13,6 +13,9 @@ version = input("enter dataset version: ")
 data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+full_set = torch.load(data_folder+"dti_full_dataset.pt")
+negative_sampler = training_utils.NegativeSampler(full_set,("gene","chg","chem"),full_set["gene"]["degree_chg"],full_set["chem"]["degree_chg"])
+
 #%%
 node_df = pd.read_csv(data_folder+"dti_tensor_df.csv",index_col=0)
 #%%
@@ -74,7 +77,7 @@ def walk(param_grid, walk_df, max_iters, k_max, conv, initial_keys, dataset):
 
             model = base_model.base_model(conv, model_params, conv_params, train_set.metadata(), [("gene", "chg", "chem")])
             try:
-                val_auc = exp_utils.train_model(model, train_params, train_data,val_data)[1]
+                val_auc = exp_utils.train_model(model, train_params, train_data,val_data, negative_sampler)[1]
             except:
                 print(params)
                 k += 1
@@ -107,7 +110,7 @@ def init_df(conv, dataset, initial_training_params, initial_model_params, initia
     else:
         train_data, val_data = exp_utils.init_features(train_set, val_set, test_set, initial_training_params)[:2]
     model = base_model.base_model(conv, initial_model_params, initial_conv_params, train_set.metadata(), [("gene", "chg", "chem")])
-    val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data)[1]
+    val_auc = exp_utils.train_model(model, initial_training_params, train_data,val_data, negative_sampler)[1]
 
     initial_params = initial_training_params|initial_model_params|initial_conv_params
     parameter_walk_df = pd.DataFrame([initial_params|{"val_auc":val_auc, "accepted":True}])

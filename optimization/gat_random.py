@@ -13,6 +13,9 @@ version = input("enter dataset version: ")
 data_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+full_set = torch.load(data_folder+"dti_full_dataset.pt")
+negative_sampler = training_utils.NegativeSampler(full_set,("gene","chg","chem"),full_set["gene"]["degree_chg"],full_set["chem"]["degree_chg"])
+
 node_df = pd.read_csv(data_folder+"dti_tensor_df.csv",index_col=0)
 dataset, node_map = training_utils.load_data(data_folder,load_inverted_map=False,load_test=True)
 train_set, val_set, test_set = dataset
@@ -38,7 +41,7 @@ with tqdm(total=97) as pbar:
 
         model = base_model.base_model(GATConv, model_params, conv_params, train_set.metadata(), [("gene", "chg", "chem")])
 
-        val_auc = exp_utils.train_model(model, train_params, train_data,val_data)[1]
+        val_auc = exp_utils.train_model(model, train_params, train_data,val_data, negative_sampler)[1]
 
         new_aucs.append(val_auc)
 

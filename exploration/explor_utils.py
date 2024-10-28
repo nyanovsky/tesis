@@ -13,7 +13,7 @@ from torch_geometric.nn import SAGEConv
 
 from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_score, precision_score, recall_score
 #%%
-def init_train_eval(dataset, params, keys, feature_dict={}):
+def init_train_eval(dataset, params, keys, negative_sampler, feature_dict={}):
     train_params, model_params, conv_params = training_utils.separate_params(params, keys)
     train_set, val_set, test_set = dataset
     train_data, val_data, test_data = exp_utils.init_features(train_set, val_set, test_set, train_params, feature_dict)
@@ -22,7 +22,7 @@ def init_train_eval(dataset, params, keys, feature_dict={}):
     
     model = base_model.base_model(SAGEConv, model_params, conv_params, train_set.metadata(), [("gene", "chg", "chem")])
 
-    model, val_auc, curves = exp_utils.train_model(model, train_params, train_data, val_data)
+    model, val_auc, curves = exp_utils.train_model(model, train_params, train_data, val_data, negative_sampler)
     
     model = model.to("cpu")
     
