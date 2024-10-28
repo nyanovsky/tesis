@@ -12,7 +12,8 @@ import pickle
 from models.training_utils import get_tensor_index_df, NegativeSampler
 
 from torch_geometric import seed_everything
-seed_everything(42)
+seed = int(input("enter seed: (42 for original dataset)"))
+seed_everything(seed)
 #%%
 def load_node_csv(path, type_col, **kwargs):
     """Returns node dataframe and a dict of mappings for each node type. 
@@ -84,7 +85,7 @@ def get_reverse_types(edge_types):
 
 
 # %%
-version = input()
+version = input("enter dataset version: (v2 for original)")
 dti_folder = f"/biodata/nyanovsky/datasets/dti/processed/{version}/"
 node_data, node_map = load_node_csv(dti_folder+"node_df.csv", "node_type")
 edge_data, edge_index = load_edge_csv(dti_folder+"edge_df.csv","src_node_index", 
@@ -185,7 +186,9 @@ for name, p in zip(list(datasets.keys()), percentage):
     prev_edges = round(num_sup_edges+num_msg_edges)
 # %%
 # Save splits to cpu
-
+is_test = bool(input("True for test versions."))
+if is_test:
+    dti_folder = f"/biodata/nyanovsky/datasets/dti/processed/v_test/seed_{seed}/"
 torch.save(data, dti_folder+"dti_full_dataset"+".pt")
 
 for name, dataset in datasets.items():
