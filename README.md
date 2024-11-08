@@ -6,7 +6,7 @@ A lot of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease as
 
 # Project Organization 
 
-├── data                              <- Data processing (network building and PyG data split), and network analysis
+├── data                              <- Data processing (network building and PyG data split), and network analysis \\
 |    |
 |    ├── ChG_db_merging.ipynb         <- Integration of external DTI data into single bipartite network
 |    ├── rdkit_sim.ipynb              <- Drug-Drug network layer building based on rdkit fingerprint similarity
