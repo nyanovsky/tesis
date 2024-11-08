@@ -25,7 +25,7 @@ A lot of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease as
 
 ├── optimization                      <- Hyperparameter optimization based on random walk with simulated annealing
 │   └── results                       <- Walk results
-│       ├── v1                        <- Old dataset results (non-visible) TODO: delete
+│       ├── v1                        <- Old dataset results. TODO: delete
 │       ├── v2                        <- Official dataset walk results
 │       └── hp_opt.py                 <- Script for performing random walk with simulated annealing
 
@@ -35,5 +35,5 @@ A lot of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease as
 │   ├── feature_analysis.ipynb        <- Analysis of gene initial features' impact on model performance
 │   └── connectivity_analysis.ipynb   <- Analysis of predictions based on network connectivity
 
-└── playground                        <- Toy scripts for testing purposes (non-visible)
+└── playground                        <- Toy scripts for testing purposes
    
