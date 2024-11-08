@@ -16,12 +16,12 @@ A lot of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease as
 │   └── split_graph.py                <- PyG HeteroData generation and splitting
 
 ├── models                            <- Model architecture, training utilities
-│   ├── base_model.py                 <- General and flexible GNN architecture similar to described in the [Design space for GNNs paper](https://arxiv.org/abs/2011.08843)
+│   ├── base_model.py                 <- General and flexible GNN architecture similar to described in the Design space for GNNs paper (https://arxiv.org/abs/2011.08843)
 │   ├── training_utils.py             <- General utilities for implementing a training pipeline; data loading, negative sampling, train/eval/test
 │   └── exp_utils.py                  <- Full training pipeline for quick model implementation
 
 ├── features                          <- Initial features for nodes in graph
-│   └── gene                          <- Gene features from Gene Ontology Molecular Function DAG embeddings, similar to described in [Go2Vec](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-019-6272-2)
+│   └── gene                          <- Gene features from Gene Ontology Molecular Function DAG embeddings, similar to described in Go2Vec (https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-019-6272-2)
 
 ├── optimization                      <- Hyperparameter optimization based on random walk with simulated annealing
 │   └── results                       <- Walk results
