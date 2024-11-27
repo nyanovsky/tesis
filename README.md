@@ -1,7 +1,7 @@
 ## Graph Neural Networks for Drug-Target Interaction Prediction
 Implementation of Graph Neural Networks in an heterogeneous two layer network consisting Drug and Target (gene products) nodes.
 
-A lot of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease association predictions. You can check out her work [here](https://github.com/ingridheuer/gcnn_gdas).
+Part of this codebase is due to Ingrid Heuer's work on GNNs for Gene-Disease association predictions. You can check out her work [here](https://github.com/ingridheuer/gcnn_gdas).
 
 
 ## Project Structure
