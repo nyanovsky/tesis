@@ -75,6 +75,7 @@ def test(model,data):
   all_true = []
   # por si el modelo predice más de un tipo de enlace, concatenamos todas las labels y preds
   # en un solo tensor y calculamos una métrica global
+
   for edge_type,y_score in predictions.items():
       y_true = edge_label[edge_type]
       all_scores.append(y_score)
@@ -173,6 +174,7 @@ class NegativeSampler:
         row = hashed_edges.div(size[1], rounding_mode='floor')
         col = hashed_edges % size[1]
         return torch.stack([row, col], dim=0)
+        
     
     def sample_negatives(self,num_samples,src_or_dst):
         """num_samples: number of samples generated, output will have shape [num_samples]. 
@@ -200,25 +202,29 @@ class NegativeSampler:
             negative_edge_index = torch.stack([new_src_index,dst_index])
             return negative_edge_index            
     
-    def test_false_negatives(self,negative_edge_index,positive_edge_index):
+    def test_false_negatives(self,negative_edge_index,positive_edge_index, avoid_index=None):
         full_hash = self.full_positive_hash
         negative_hash = self.index_to_hash(negative_edge_index)
         positive_hash = self.index_to_hash(positive_edge_index) 
 
         false_negatives_mask = torch.isin(negative_hash,full_hash)
+        if avoid_index != None:
+            leaks = self.leaks(negative_edge_index, avoid_index)
+            false_negatives_mask |= leaks
+        
         new_negative_hash = negative_hash[~false_negatives_mask]  # hashed true negative edges
         retry_positive_hash = positive_hash[false_negatives_mask] # hashed false negative edges
 
         return new_negative_hash, retry_positive_hash
     
-    def get_negative_sample(self,positive_edge_index,method):
+    def get_negative_sample(self,positive_edge_index,method, avoid_index=None):
         true_negatives = []
         retry_positive_hash = torch.tensor([0]) #placeholder
         temp_positive_edge_index = copy.copy(positive_edge_index)
 
         while retry_positive_hash.numel() > 0:
             negative_edge_index = self.generate_negative_edge_index(temp_positive_edge_index,method)
-            true_neg_hash, retry_positive_hash = self.test_false_negatives(negative_edge_index,temp_positive_edge_index)
+            true_neg_hash, retry_positive_hash = self.test_false_negatives(negative_edge_index,temp_positive_edge_index, avoid_index)
 
             true_negatives.append(true_neg_hash)
             temp_positive_edge_index = self.hash_to_index(retry_positive_hash)
@@ -229,7 +235,7 @@ class NegativeSampler:
 
         return negative_edge_index
     
-    def get_labeled_tensors(self,positive_edge_index,method):
+    def get_labeled_tensors(self,positive_edge_index,method,avoid_index=None):
         """positive_edge_index: edge_index with only positive edges. 
         This function will use positive_edge_index as a starting point to generate a negative index
         with the same shape as positive_edge_index.
@@ -239,11 +245,22 @@ class NegativeSampler:
         fix_src: keep original src nodes fixed and sample dst nodes with probability deg**0.75
         fix_dst: like fix_src but keep original dst nodes"""
 
-        sample = self.get_negative_sample(positive_edge_index,method)
+        sample = self.get_negative_sample(positive_edge_index,method, avoid_index)
         edge_label_index = torch.concat([positive_edge_index,sample],dim=1)
         edge_label = torch.concat([torch.ones(positive_edge_index.shape[1]), torch.zeros(positive_edge_index.shape[1])])
         return edge_label_index, edge_label
     
+    
+    def leaks(self, neg_tensor_1:torch.Tensor, neg_tensor_2:torch.Tensor):                #type:ignore
+        """
+        returns a mask for tensor_1 which indicate the indexes of elements which are in the second tensor
+        """
+        hash_neg_1 = self.index_to_hash(neg_tensor_1)
+        hash_neg_2 = self.index_to_hash(neg_tensor_2)
+        leaks = torch.nonzero(torch.isin(hash_neg_1, hash_neg_2)).flatten()
+        mask = torch.zeros(neg_tensor_1.size(1), dtype=torch.bool)
+        mask[leaks] = True
+        return mask
     
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
@@ -261,3 +278,13 @@ class EarlyStopper:
             if self.counter >= self.patience:
                 return True
         return False
+    
+    
+
+def separate_params(param_dict, keys):
+    training_keys, model_keys, conv_keys = keys
+    train_params = {key:val for key,val in param_dict.items() if key in training_keys}
+    model_params = {key:val for key,val in param_dict.items() if key in model_keys}
+    conv_params = {key:val for key,val in param_dict.items() if key in conv_keys}
+    return train_params, model_params, conv_params    
+# %%

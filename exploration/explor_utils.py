@@ -22,7 +22,7 @@ def init_train_eval(dataset, params, keys, negative_sampler, feature_dict={}):
     
     model = base_model.base_model(SAGEConv, model_params, conv_params, train_set.metadata(), [("gene", "chg", "chem")])
 
-    model, val_auc, curves = exp_utils.train_model(model, train_params, train_data, val_data, negative_sampler)
+    model, val_auc, curves = exp_utils.train_model(model, train_params, train_data, val_data, test_data, negative_sampler)
     
     model = model.to("cpu")
     

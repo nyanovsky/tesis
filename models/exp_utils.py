@@ -28,11 +28,17 @@ def init_features(train_set, val_set, test_set, params, feature_dict={}):
 #full_set = torch.load(data_folder+"dti_full_dataset.pt")
 #negative_sampler = training_utils.NegativeSampler(full_set,("gene","chg","chem"),full_set["gene"]["degree_chg"],full_set["chem"]["degree_chg"])
 
-def train_model(model, params, train_set, val_set, negative_sampler):
+def train_model(model, params, train_set, val_set, test_set, negative_sampler):
+    
+    val_negs = val_set.edge_label_index_dict["gene","chg","chem"][:,3839:]
+    test_negs = test_set.edge_label_index_dict["gene","chg","chem"][:,3839:]
+    
+    avoid_negs = torch.concat((val_negs, test_negs), dim=1)
     
     train_set.to(device)
     val_set.to(device)
 
+    
     # Initialize model
     model = model.to(device)
 
@@ -50,7 +56,7 @@ def train_model(model, params, train_set, val_set, negative_sampler):
 
     for epoch in range(params["epochs"]):
         #Resample negative supervision links every epoch
-        new_train_label_index, new_train_label = negative_sampler.get_labeled_tensors(train_label_index.cpu(),"corrupt_both")
+        new_train_label_index, new_train_label = negative_sampler.get_labeled_tensors(train_label_index.cpu(),"corrupt_both", avoid_index=avoid_negs)
         train_set["gene","chg","chem"]["edge_label_index"] = new_train_label_index.to(device)
         train_set["gene","chg","chem"]["edge_label"] = new_train_label.to(device)
 
@@ -100,7 +106,9 @@ def full_eval(data,model,node_df):
 
 def run_experiment(model, initialized_train_set, initialized_val_set, initialized_test_set, params, negative_sampler, node_df ):
 
-    model, val_auc, curve_data = train_model(model, params, initialized_train_set, initialized_val_set, negative_sampler)
+    model, val_auc, curve_data = train_model(model, params, initialized_train_set, initialized_val_set, 
+                                             initialized_test_set, 
+                                             negative_sampler)
 
     model = model.to("cpu")
     
