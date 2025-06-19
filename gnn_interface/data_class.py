@@ -43,7 +43,14 @@ class GNNData:
         self._load_data(node_path, edge_path, node_index_col, src_edge_col, dst_edge_col,
                         node_type_col, edge_type_col, src_node_type_col, dst_node_type_col, **kwargs)
         
-        self._create_pyg_data()
+        # Build the NetworkX graph as the source of truth for structure
+        self._build_nx_from_dfs()
+
+        # Update dataframes with graph-derived features (e.g., degree)
+        self._update_dfs_from_nx()
+        
+        # Create the PyG data object from the dataframes
+        self._update_pyg_from_dfs()
 
     def _load_data(self, node_path, edge_path, node_index_col, src_edge_col, dst_edge_col,
                    node_type_col, edge_type_col, src_node_type_col, dst_node_type_col, **kwargs):
@@ -58,8 +65,53 @@ class GNNData:
         self.src_edge_col = src_edge_col
         self.dst_edge_col = dst_edge_col
 
-    def _create_pyg_data(self):
-        """Creates the PyG Data or HeteroData object."""
+    def _build_nx_from_dfs(self):
+        """Builds the initial NetworkX graph from the input dataframes."""
+        G = nx.DiGraph()
+        
+        # Add nodes with attributes from node_df
+        for node_id, attrs in self.node_df.iterrows():
+            node_attrs = attrs.to_dict()
+            if self.is_hetero:
+                node_attrs['node_type'] = self.node_df.loc[node_id][self.node_type_col]
+            G.add_node(node_id, **node_attrs)
+
+        # Add edges with attributes from edge_df
+        for _, row in self.edge_df.iterrows():
+            src_id = row[self.src_edge_col]
+            dst_id = row[self.dst_edge_col]
+            edge_attrs = {}
+            if self.is_hetero and self.edge_type_col:
+                edge_attrs['edge_type'] = row[self.edge_type_col]
+            G.add_edge(src_id, dst_id, **edge_attrs)
+            
+        self._nx_graph = G
+
+    def _update_dfs_from_nx(self):
+        """Updates DataFrames based on the current state of the NetworkX graph."""
+        # Update node_df with degree information
+        if self._nx_graph:
+            degrees = dict(self._nx_graph.degree())
+            self.node_df['degree'] = self.node_df.index.map(degrees)
+
+        # Update edge_df from the graph
+        edge_list = []
+        for u, v, attrs in self._nx_graph.edges(data=True):
+            edge_info = {self.src_edge_col: u, self.dst_edge_col: v}
+            if self.is_hetero:
+                u_type = self._nx_graph.nodes[u].get('node_type')
+                v_type = self._nx_graph.nodes[v].get('node_type')
+                edge_info[self.src_node_type_col] = u_type
+                edge_info[self.dst_node_type_col] = v_type
+                if self.edge_type_col in attrs:
+                    edge_info[self.edge_type_col] = attrs[self.edge_type_col]
+            edge_list.append(edge_info)
+        
+        if edge_list:
+            self.edge_df = pd.DataFrame(edge_list)
+
+    def _update_pyg_from_dfs(self):
+        """Recreates the PyG Data or HeteroData object from the dataframes."""
         if self.is_hetero:
             self.data = self._create_hetero_data()
         else:
@@ -100,6 +152,12 @@ class GNNData:
                     dst_degree = degree(edge_index[1], self.data[dst_type].num_nodes)
                     self.data[dst_type].degrees_by_edge_type[edge_type] = dst_degree
             
+    def _create_pyg_data(self):
+        """[DEPRECATED] Creates the PyG Data or HeteroData object."""
+        # This method is replaced by _update_pyg_from_dfs to follow the new flow.
+        # It's kept for now to avoid breaking old calls, but can be removed.
+        self._update_pyg_from_dfs()
+
     def _create_homo_data(self):
         """Creates a homogeneous PyG Data object."""
         node_mapping = {index: i for i, index in enumerate(self.node_df.index.unique())}
@@ -146,6 +204,10 @@ class GNNData:
 
             src = [src_mapping[index] for index in sub_df[self.src_edge_col]]
             dst = [dst_mapping[index] for index in sub_df[self.dst_edge_col]]
+            
+            if not src or not dst:  # Skip empty edge types
+                continue
+                
             edge_index = torch.tensor([src, dst])
             data[src_type, edge_triplet[1], dst_type].edge_index = edge_index
         
@@ -245,63 +307,22 @@ class GNNData:
     @property
     def nx_graph(self) -> nx.DiGraph:
         """
-        Returns the graph as a networkx.DiGraph object.
-        Node identifiers in NetworkX will be the original IDs from the input files.
+        The NetworkX graph representation.
+        
+        You can get a mutable copy of the graph, modify it (e.g., rewire edges),
+        and then assign it back to this property to trigger a full update of the
+        GNNData object's internal state (DataFrames, PyG data object).
+
+        Example:
+            >>> G_copy = gnn_data.nx_graph
+            >>> G_copy.add_edge(node1, node2)
+            >>> gnn_data.nx_graph = G_copy
         """
-        G = nx.DiGraph()
-        
-        for node_type, mapping in self.node_mappings.items():
-            rev_mapping = self.rev_node_mappings[node_type]
-            for i in range(len(mapping)):
-                node_id = rev_mapping[i]
-                attrs = self.node_df.loc[node_id].to_dict()
-                if self.is_hetero:
-                    attrs['node_type'] = node_type
-                G.add_node(node_id, **attrs)
+        return self._nx_graph.copy()
 
-        for edge_type, edge_index in self.data.edge_index_dict.items():
-            src_type, rel_type, dst_type = edge_type
-            src_nodes = edge_index[0].tolist()
-            dst_nodes = edge_index[1].tolist()
-            
-            rev_src_map = self.rev_node_mappings[src_type]
-            rev_dst_map = self.rev_node_mappings[dst_type]
-
-            for i in range(len(src_nodes)):
-                src_id = rev_src_map[src_nodes[i]]
-                dst_id = rev_dst_map[dst_nodes[i]]
-                if self.is_hetero:
-                    G.add_edge(src_id, dst_id, edge_type=rel_type)
-                else:
-                    G.add_edge(src_id, dst_id)
-        
-        return G
-
-    def update_from_nx(self, G: nx.DiGraph):
-        """
-        Updates the internal PyG data object from a modified NetworkX graph.
-        This is useful for experiments like edge rewiring.
-        Currently supports edge modifications, not node additions/deletions.
-        """
-        # Simple implementation assuming nodes have not changed
-        edge_list = []
-        for u, v, attrs in G.edges(data=True):
-            edge_info = {'source': u, 'target': v}
-            if self.is_hetero:
-                # This part needs to know how to get the types.
-                # A robust implementation might require storing original types on the nx graph
-                # or making assumptions. For now, we extract from node attributes.
-                u_type = G.nodes[u].get('node_type')
-                v_type = G.nodes[v].get('node_type')
-                e_type = attrs.get('edge_type')
-                edge_info[self.src_node_type_col] = u_type
-                edge_info[self.dst_node_type_col] = v_type
-                edge_info[self.edge_type_col] = e_type
-
-            edge_list.append(edge_info)
-        
-        self.edge_df = pd.DataFrame(edge_list)
-        self.edge_df.rename(columns={'source': self.src_edge_col, 'target': self.dst_edge_col}, inplace=True)
-        
-        # Re-create PyG data
-        self._create_pyg_data() 
+    @nx_graph.setter
+    def nx_graph(self, new_graph: nx.DiGraph):
+        """Updates the object state from a new NetworkX graph."""
+        self._nx_graph = new_graph
+        self._update_dfs_from_nx()
+        self._update_pyg_from_dfs()
