@@ -90,9 +90,11 @@ class GNNData:
     def _update_dfs_from_nx(self):
         """Updates DataFrames based on the current state of the NetworkX graph."""
         # Update node_df with degree information
+        '''
         if self._nx_graph:
             degrees = dict(self._nx_graph.degree())
             self.node_df['degree'] = self.node_df.index.map(degrees)
+        '''
 
         # Update edge_df from the graph
         edge_list = []
@@ -326,3 +328,12 @@ class GNNData:
         self._nx_graph = new_graph
         self._update_dfs_from_nx()
         self._update_pyg_from_dfs()
+    
+    def update_data_from_nx(self, G: nx.DiGraph, inplace=True):
+        data = self if inplace else copy.deepcopy(self)
+        data._nx_graph = G 
+        data._update_dfs_from_nx()
+        data._update_pyg_from_dfs()
+
+        if not inplace:
+            return data

@@ -7,6 +7,8 @@ from typing import Union, Dict, Any
 from models.base_model import base_model
 from models.training_utils import EarlyStopper, train as train_step, get_val_loss, test as test_step, NegativeSampler
 from tqdm.notebook import tqdm
+import pandas as pd
+from torch_geometric import seed_everything
 
 # Mapping string names to convolution classes for easy selection
 CONV_MAP = {
@@ -76,7 +78,8 @@ class LinkPredictor(torch.nn.Module):
               negative_sampler: NegativeSampler,
               supervision_edge_type: tuple,
               epochs: int,
-              verbose: bool = True):
+              verbose: bool = True,
+              deterministic_sampling=False):
         """
         Trains the model for link prediction using negative sampling.
 
@@ -88,6 +91,7 @@ class LinkPredictor(torch.nn.Module):
                                            (e.g., ('gene', 'chg', 'chem')).
             epochs (int): The number of epochs to train for.
             verbose (bool): If True, shows a progress bar and training metrics.
+            deterministic_sampling: If True, fixes seed at each epoch for sampling negative edges at that epoch.
 
             Only supports one supervision edge type for now.
         """
@@ -112,6 +116,8 @@ class LinkPredictor(torch.nn.Module):
         #iterator = tqdm(range(epochs), desc="Training", disable=not verbose)
         for epoch in range(epochs):
             # Resample negative edges at each epoch
+            if deterministic_sampling:
+                seed_everything(epoch)
             new_label_index, new_label = negative_sampler.get_labeled_tensors(train_pos_index.cpu(), "corrupt_both", avoid_index=avoid_negs)
             train_data[supervision_edge_type].edge_label_index = new_label_index.to(self.device)
             train_data[supervision_edge_type].edge_label = new_label.to(self.device)
@@ -135,11 +141,11 @@ class LinkPredictor(torch.nn.Module):
                     "train_loss": f"{train_loss:.4f}", "val_loss": f"{val_loss:.4f}",
                     "train_auc": f"{train_auc:.4f}", "val_auc": f"{val_auc:.4f}"
                 })
-            '''
+            
             if early_stopper.early_stop(val_loss):
                 if verbose:
                     print(f"Early stopping at epoch {epoch+1}")
-                break
+                break '''
         
         return self.history
 
@@ -156,11 +162,41 @@ class LinkPredictor(torch.nn.Module):
 
         return {'loss': loss, 'roc_auc': roc_auc}
     
-    def get_encodings(self, data: HeteroData) -> Dict[str, torch.Tensor]:
+    def get_encodings(self, train_data: HeteroData) -> Dict[str, torch.Tensor]:
         """Returns the node embeddings for the given data."""
         if self._model is None:
             raise RuntimeError("Model has not been trained. Call .train() first.")
         
         self._model.eval()
-        data.to(self.device)
-        return self._model.encoder(data.x_dict, data.edge_index_dict)
+        train_data.to(self.device)
+        return self._model.encoder(train_data.x_dict, train_data.edge_index_dict)
+    
+    def get_predictions(self, splits:Dict[str, HeteroData], supervision_edge_type:tuple):
+        '''
+        Returns:
+        {train: train_pos_preds, val: {pos:preds, neg:preds}, test:{pos:preds, neg:preds}}
+        Negative training predictions correspond to those sampled in the last epoch, since
+        since these are re-sampled on each epoch.
+        '''
+        train, val, test = splits["train"], splits["val"], splits["test"]
+        src_type, _, dst_type = supervision_edge_type
+
+        encodings = self.get_encodings(train)
+        encodings_src = encodings[src_type]
+        encodings_dst = encodings[dst_type]
+
+        pred_dict = {}
+
+        for split, data in splits.items():
+            src_nodes = data.edge_label_index_dict[supervision_edge_type][0]
+            dst_nodes = data.edge_label_index_dict[supervision_edge_type][1]
+            
+            preds = torch.sigmoid((encodings_src[src_nodes] * encodings_dst[dst_nodes]).sum(dim=1))
+            preds.detach().to("cpu")
+
+            negs = data.edge_label_dict[supervision_edge_type] == 0
+            pos = data.edge_label_dict[supervision_edge_type] == 1
+                
+            pred_dict[split] = {"pos":preds[pos], "negs": preds[negs]}
+                
+        return pred_dict
